@@ -1,0 +1,24 @@
+{
+  "name": "oil-disruption-hook",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Uniswap V4 hook for oil token with disruption-based pricing",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "contracts:build": "pnpm --filter contracts build",
+    "contracts:test": "pnpm --filter contracts test",
+    "frontend:dev": "pnpm --filter frontend dev",
+    "frontend:build": "pnpm --filter frontend build"
+  },
+  "keywords": [
+    "uniswap",
+    "v4",
+    "hooks",
+    "defi",
+    "hackathon"
+  ],
+  "author": "",
+  "license": "MIT"
+}

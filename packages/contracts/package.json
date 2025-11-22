@@ -1,0 +1,22 @@
+{
+  "name": "contracts",
+  "version": "1.0.0",
+  "description": "Smart contracts for Oil Disruption Hook",
+  "scripts": {
+    "build": "hardhat compile",
+    "test": "hardhat test",
+    "deploy": "hardhat run scripts/deploy.ts"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox-viem": "^3.0.0",
+    "@nomicfoundation/hardhat-viem": "^2.0.0",
+    "hardhat": "^2.22.0",
+    "typescript": "^5.0.0",
+    "@types/node": "^20.0.0"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "^5.0.0",
+    "@chainlink/contracts": "^1.0.0",
+    "viem": "^2.0.0"
+  }
+}
