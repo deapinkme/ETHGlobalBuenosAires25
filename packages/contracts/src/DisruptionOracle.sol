@@ -54,7 +54,7 @@ contract DisruptionOracle {
     event PriceSentCrossChain(uint32 indexed dstEid, uint256 price, uint256 timestamp);
 
     modifier onlyOwner() {
-        require(msg.sender == owner, "Only owner");
+        require(msg.sender == owner, "Only owner can call");
         _;
     }
 
