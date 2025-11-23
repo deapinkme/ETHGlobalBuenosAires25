@@ -1,4 +1,4 @@
-# Oil Disruption Hook - Uniswap V4
+# Natural Gas Disruption Hook - Uniswap V4
 
 A Uniswap V4 hook that creates market incentives for price convergence based on real-world oil disruption events using Chainlink oracles.
 
