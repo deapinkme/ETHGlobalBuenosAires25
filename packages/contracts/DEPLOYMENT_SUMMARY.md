@@ -79,11 +79,14 @@
 - Can update prices from EIA API with cryptographic proofs
 - Fully decentralized price feeds
 
-### ✅ LayerZero V2 Cross-Chain Bridge
-- Flare → Base messaging configured
-- Price updates bridge automatically
-- EID 30295 → EID 30184
-- ~1-2 minute delivery time
+### ⚠️  LayerZero V2 Cross-Chain Bridge (Needs Completion)
+- Flare → Base configuration completed
+  - Endpoint: 0x1a44076...728c
+  - Source EID: 30295 → Destination EID: 30184
+  - Receiver address configured on both chains
+- **Issue**: `sendPriceUpdate()` function emits event but doesn't call LayerZero's `send()` function
+- **Fix Needed**: Add LayerZero endpoint.send() call with proper MessagingFee and Options
+- Estimated delivery time once fixed: ~1-2 minutes
 
 ### ✅ Uniswap V4 Hook Integration
 - CREATE2 deployed to valid hook address (0x...c0)
@@ -208,12 +211,50 @@ export const config = createConfig({
 6. **CREATE2 Deployment** - Valid hook address with proper flags
 7. **Dynamic Fees** - Working asymmetric incentive mechanism
 
+## Pool Liquidity Status
+
+**Current Status**: Pool initialized but NO liquidity added yet.
+
+### Why Manual Liquidity Addition is Complex
+
+Uniswap V4 uses concentrated liquidity with complex mathematics to calculate how many tokens are required for a given liquidity amount. The `modifyLiquidity` function requires:
+- Precise tick range calculation
+- Liquidity delta in V4's internal units (not token amounts)
+- Proper settlement of both currencies based on returned deltas
+
+### How to Add Liquidity
+
+**Option 1: Use Uniswap V4 SDK** (Recommended)
+```typescript
+// Use @uniswap/v4-sdk to calculate proper liquidity amounts
+import { Position } from '@uniswap/v4-sdk'
+```
+
+**Option 2: Use Frontend Integration**
+- The frontend can integrate with Uniswap V4 periphery contracts
+- Provides user-friendly interface for adding liquidity
+- Handles all complex calculations automatically
+
+**Option 3: Manual via Cast** (For testing)
+```bash
+# Mint more test tokens first
+cast send 0x4aA1dF02688241e4c665D4837a7c201CddF9F3CD \
+  "mint(address,uint256)" \
+  $YOUR_ADDRESS \
+  1000000000000000000000000 \
+  --rpc-url https://mainnet.base.org \
+  --private-key $PRIVATE_KEY
+
+# Then use a proper PositionManager contract or V4 SDK
+```
+
 ## Next Steps
 
 ### Immediate
 1. **Test Cross-Chain Bridge** - Send a price update from Flare to Base
 2. **Connect Frontend** - Update config files and test UI
-3. **Execute Test Swaps** - Demonstrate fee/bonus mechanism
+3. **Add Liquidity via Frontend** - Once UI is connected, add liquidity through proper interface
+4. **Execute Test Swaps** - Demonstrate fee/bonus mechanism
 
 ### Demo Preparation
 1. **Scenario 1**: Show FDC price update on Flare
