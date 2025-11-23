@@ -1,6 +1,6 @@
 # Natural Gas Disruption Hook - Uniswap V4
 
-A Uniswap V4 hook that creates market incentives for price convergence based on real-world oil disruption events using Chainlink oracles.
+A Uniswap V4 hook that creates market incentives for price convergence based on real-world natural gas prices using Flare Data Connector (FDC) oracles.
 
 ## Overview
 
@@ -9,24 +9,25 @@ This project implements a novel pricing mechanism where:
 - **Aligned traders** (correcting price toward theoretical) pay **low fees** + receive **bonuses**
 - Bonuses are funded by misaligned trader fees (self-sustaining)
 - Creates profitable arbitrage opportunities that drive price discovery
+- Uses **Flare Data Connector (FDC)** for decentralized, verifiable price feeds
 
 ## How It Works
 
 ### Example Scenario
 
 **Setup:**
-- Oracle theoretical price: $100 (based on real-world data)
-- Pool price: $120 (speculation/FOMO)
+- Oracle theoretical price: $3.50 (based on real-world natural gas data via FDC)
+- Pool price: $4.20 (speculation/FOMO)
 - Deviation: 20% too high
 
 **Trading Dynamics:**
 
 | Trader Type | Action | Fee | Bonus | Net Result |
 |------------|--------|-----|-------|------------|
-| Seller (aligned) | Sells 1 OIL | 0.1% | +$4.80 | Gets $124.68 (ABOVE market!) |
-| Buyer (misaligned) | Buys 1 OIL | 4% | None | Pays $124.80 (in quote) |
+| Seller (aligned) | Sells 1 NATGAS | 0.1% | +$0.17 | Gets $4.37 (ABOVE market!) |
+| Buyer (misaligned) | Buys 1 NATGAS | 4% | None | Pays $4.37 (in quote) |
 
-**Result:** Sellers are incentivized to sell, pushing price down toward $100. As price converges, incentives decrease to zero.
+**Result:** Sellers are incentivized to sell, pushing price down toward $3.50. As price converges, incentives decrease to zero.
 
 ## Project Structure
 
@@ -37,10 +38,10 @@ ETHGlobalBuenosAires25/
 └── packages/
     ├── contracts/                   # Smart contracts (Hardhat 3)
     │   ├── contracts/
-    │   │   ├── OilToken.sol         # Oil ERC20 token
+    │   │   ├── NatGasToken.sol      # Natural Gas ERC20 token (NATGAS)
     │   │   ├── MockUSDC.sol         # Mock USDC (6 decimals)
-    │   │   ├── DisruptionOracle.sol # Price oracle
-    │   │   ├── OilDisruptionHook.sol # Main V4 hook (TODO)
+    │   │   ├── DisruptionOracle.sol # FDC-powered price oracle
+    │   │   ├── NatGasDisruptionHook.sol # Main V4 hook (TODO)
     │   │   └── libraries/
     │   │       ├── FeeCurve.sol     # Dynamic fee calculations
     │   │       └── BonusCurve.sol   # Bonus calculations
@@ -55,8 +56,9 @@ ETHGlobalBuenosAires25/
 
 ### Deployed Contracts
 
-#### OilToken.sol
-- Standard ERC20 representing oil
+#### NatGasToken.sol
+- Standard ERC20 representing natural gas
+- Symbol: **NATGAS**
 - 18 decimals
 - Mintable for testing
 
@@ -66,12 +68,17 @@ ETHGlobalBuenosAires25/
 - Includes `faucet()` function for easy testing
 
 #### DisruptionOracle.sol
-- Tracks real-world disruption events
-- Calculates theoretical price based on:
-  - Base price
-  - Disruption type (supply shock, demand shock, weather, sanctions)
-  - Price impact percentage
-- Owner-controlled (will integrate Chainlink in production)
+- **Powered by Flare Data Connector (FDC)** for decentralized price feeds
+- Tracks real-world disruption events (for future iterations)
+- Price calculation:
+  - Base price updated via FDC attestations from external APIs
+  - Disruption tracking available but not affecting price in initial iteration
+  - Anyone can submit valid FDC proofs to update prices
+- **Disruption types** (tracked but inactive in v1):
+  - Supply shock
+  - Demand shock
+  - Weather events
+  - Sanctions
 
 #### Libraries
 
@@ -85,11 +92,43 @@ ETHGlobalBuenosAires25/
 - Calculates bonus rates for aligned traders
 - Includes treasury-adjusted bonuses
 
-### OilDisruptionHook.sol (In Progress)
+### NatGasDisruptionHook.sol (In Progress)
 
 Main Uniswap V4 hook that:
 1. **beforeSwap**: Sets dynamic fee based on alignment
 2. **afterSwap**: Pays bonuses to aligned traders from treasury
+
+## Flare Data Connector (FDC) Integration
+
+### What is FDC?
+
+Flare Data Connector enables smart contracts to access off-chain data in a decentralized and verifiable way. Unlike traditional oracles, FDC:
+- Provides cryptographic proofs of external API data
+- Allows anyone to submit price updates (fully decentralized)
+- Verifies data authenticity on-chain before accepting
+
+### How We Use FDC
+
+**Price Updates:**
+```solidity
+// Anyone can call with valid FDC proof
+function updateBasePriceWithFDC(IWeb2Json.Proof calldata proof) external
+```
+
+- Fetches natural gas prices from external APIs (EIA, commodity markets, etc.)
+- Proof is verified on-chain using Flare's verification contract
+- Price must be fresh (< 1 hour old)
+- Updates basePrice used for theoretical price calculations
+
+**Weather Disruptions (Future):**
+```solidity
+// Tracks weather events but doesn't affect price yet
+function setWeatherDisruptionWithFDC(IWeb2Json.Proof calldata proof) external
+```
+
+- Weather data from external APIs with severity rating (0-10)
+- Verified via FDC attestations
+- Infrastructure ready for future iterations
 
 ## Getting Started
 
@@ -154,35 +193,37 @@ npx hardhat run scripts/deploy.ts --network baseSepolia
 
 ### Price Convergence
 
-1. Oracle updates theoretical price (e.g., $100)
-2. Pool price diverges (e.g., $150 from speculation)
+1. FDC updates theoretical price (e.g., $3.50 via external API proof)
+2. Pool price diverges (e.g., $5.25 from speculation)
 3. Sellers see 50% deviation → earn max bonuses
 4. Arbitrageurs sell to capture bonuses
-5. Pool price moves toward $100
+5. Pool price moves toward $3.50
 6. Bonuses decrease as deviation shrinks
-7. At $100: symmetric fees, no bonuses
+7. At $3.50: symmetric fees, no bonuses
 
 ## Disruption Types
 
-The oracle supports multiple disruption types:
+The oracle supports multiple disruption types (infrastructure ready for future iterations):
 
-- **SUPPLY_SHOCK**: Production disruptions (hurricanes, refinery issues)
-- **DEMAND_SHOCK**: Demand changes (recessions, seasonal shifts)
+- **SUPPLY_SHOCK**: Production disruptions (hurricanes, pipeline issues)
+- **DEMAND_SHOCK**: Demand changes (winter demand spikes, seasonal shifts)
 - **WEATHER**: Weather events affecting production/transport
 - **SANCTIONS**: Geopolitical sanctions affecting supply
+
+**Note**: In the initial hackathon iteration, disruptions are tracked but do not affect the theoretical price calculation. The price is based solely on FDC-verified external API data.
 
 ## Roadmap
 
 ### Phase 1: Core Contracts ✅
-- [x] OilToken
+- [x] NatGasToken (NATGAS)
 - [x] MockUSDC
-- [x] DisruptionOracle
+- [x] DisruptionOracle with FDC integration
 - [x] FeeCurve library
 - [x] BonusCurve library
 
 ### Phase 2: Hook Implementation (In Progress)
 - [ ] Create V4 interface definitions
-- [ ] Implement OilDisruptionHook
+- [ ] Implement NatGasDisruptionHook
 - [ ] beforeSwap: Dynamic fee logic
 - [ ] afterSwap: Bonus distribution
 
@@ -191,11 +232,12 @@ The oracle supports multiple disruption types:
 - [ ] Integration tests
 - [ ] Fee curve validation
 - [ ] Price convergence simulation
+- [ ] FDC proof validation tests
 
-### Phase 4: Chainlink Integration
-- [ ] Chainlink Functions for data fetching
-- [ ] Automated oracle updates
-- [ ] Real-world API integration
+### Phase 4: Enhanced FDC Integration
+- [ ] Weather disruption activation
+- [ ] Additional disruption type integration
+- [ ] Multi-source price aggregation
 
 ### Phase 5: Frontend
 - [ ] Next.js setup
@@ -203,8 +245,10 @@ The oracle supports multiple disruption types:
 - [ ] Price dashboard
 - [ ] Disruption timeline
 - [ ] Treasury balance display
+- [ ] FDC proof submission interface
 
 ### Phase 6: Deployment
+- [ ] Deploy to Flare testnet (Coston2)
 - [ ] Deploy to Base Sepolia
 - [ ] Initialize pool
 - [ ] Add liquidity
@@ -219,57 +263,66 @@ The oracle supports multiple disruption types:
 PRIVATE_KEY=your_wallet_private_key
 BASE_SEPOLIA_RPC=https://sepolia.base.org
 SEPOLIA_RPC=https://rpc.sepolia.org
+COSTON2_RPC=https://coston2-api.flare.network/ext/C/rpc
 ETHERSCAN_API_KEY=your_api_key
 ```
 
 ### Oracle Configuration
 
 ```solidity
-// Default base price: $100
-basePrice = 100 * 10**6  // 100 USDC (6 decimals)
+// Default base price: $3.50
+basePrice = 3.50 * 10**6  // 3.50 USDC (6 decimals)
 
-// Example disruption
-oracle.setDisruption(
-    DisruptionType.SUPPLY_SHOCK,
-    25  // +25% price impact
-);
-// Theoretical price now: $125
+// Update price via FDC
+oracle.updateBasePriceWithFDC(fdcProof);
+
+// Future: Set weather disruption (tracked but not affecting price yet)
+oracle.setWeatherDisruptionWithFDC(weatherProof);
 ```
 
 ## Testing Scenarios
 
-### Scenario 1: Supply Disruption
+### Scenario 1: Winter Demand Spike
 ```
-Oracle: $100 → $130 (+30% impact)
-Pool: $100
+FDC Oracle: $3.50 → User submits FDC proof with $4.55 (+30% spike)
+Pool: $3.50
 Expected: Buyers get bonuses, sellers pay fees
-Result: Price rises to $130
+Result: Price rises to $4.55
 ```
 
 ### Scenario 2: Speculation Bubble
 ```
-Oracle: $100
-Pool: $180 (degen pump)
+FDC Oracle: $3.50 (verified via FDC)
+Pool: $6.30 (degen pump)
 Expected: Sellers get massive bonuses, buyers pay high fees
-Result: Price crashes to $100
+Result: Price crashes to $3.50
 ```
 
-### Scenario 3: Demand Collapse
+### Scenario 3: Oversupply
 ```
-Oracle: $100 → $70 (-30% impact)
-Pool: $100
+FDC Oracle: $3.50 → User submits FDC proof with $2.45 (-30% drop)
+Pool: $3.50
 Expected: Sellers get bonuses, buyers pay fees
-Result: Price falls to $70
+Result: Price falls to $2.45
 ```
 
 ## Tech Stack
 
-- **Smart Contracts**: Solidity 0.8.24
+- **Smart Contracts**: Solidity 0.8.25
 - **Development**: Hardhat 3
 - **Testing**: Hardhat + Viem
+- **Oracle**: Flare Data Connector (FDC)
 - **Frontend**: Next.js 14, wagmi, viem
-- **Oracle**: Chainlink Functions
 - **DEX**: Uniswap V4
+- **Networks**: Flare Coston2, Base Sepolia
+
+## Key Innovations
+
+1. **Flare FDC Integration**: Decentralized, verifiable price feeds without relying on centralized oracles
+2. **Asymmetric Incentives**: Aligned traders earn MORE than market price
+3. **Self-Sustaining**: Bonuses funded by misaligned trader fees
+4. **Gradual Curves**: Smooth fee and bonus scaling prevents gaming
+5. **Real-World Data**: Natural gas prices from verified external APIs
 
 ## Contributing
 
@@ -282,5 +335,5 @@ MIT
 ## Acknowledgments
 
 - Uniswap V4 for the hooks architecture
-- Chainlink for oracle infrastructure
+- Flare Network for the Data Connector infrastructure
 - ETHGlobal for the hackathon opportunity
