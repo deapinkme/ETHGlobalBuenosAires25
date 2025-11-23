@@ -6,12 +6,14 @@ import {NatGasDisruptionHook} from "../src/NatGasDisruptionHook.sol";
 import {DisruptionOracle} from "../src/DisruptionOracle.sol";
 import {MockPoolManager} from "./mocks/MockPoolManager.sol";
 import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
+import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {PoolId, PoolIdLibrary} from "@uniswap/v4-core/src/types/PoolId.sol";
 import {Currency, CurrencyLibrary} from "@uniswap/v4-core/src/types/Currency.sol";
 import {BalanceDelta, toBalanceDelta} from "@uniswap/v4-core/src/types/BalanceDelta.sol";
 import {Hooks} from "@uniswap/v4-core/src/libraries/Hooks.sol";
 import {SwapParams} from "@uniswap/v4-core/src/types/PoolOperation.sol";
+import {HookMiner} from "@uniswap/v4-periphery/src/utils/HookMiner.sol";
 
 contract NatGasDisruptionHookTest is Test {
     using PoolIdLibrary for PoolKey;
@@ -33,7 +35,21 @@ contract NatGasDisruptionHookTest is Test {
     function setUp() public {
         oracle = new DisruptionOracle(ORACLE_PRICE);
         poolManager = new MockPoolManager();
-        hook = new NatGasDisruptionHook(IPoolManager(address(poolManager)), oracle);
+
+        uint160 flags = uint160(
+            Hooks.BEFORE_SWAP_FLAG | Hooks.AFTER_SWAP_FLAG
+        );
+
+        bytes memory constructorArgs = abi.encode(IPoolManager(address(poolManager)), oracle);
+
+        (address hookAddress, bytes32 salt) =
+            HookMiner.find(address(this), flags, type(NatGasDisruptionHook).creationCode, constructorArgs);
+
+        hook = new NatGasDisruptionHook{salt: salt}(IPoolManager(address(poolManager)), oracle);
+
+        require(address(hook) == hookAddress, "Hook address mismatch");
+
+        Hooks.validateHookPermissions(IHooks(address(hook)), hook.getHookPermissions());
 
         currency0 = Currency.wrap(address(0x1000));
         currency1 = Currency.wrap(address(0x2000));
