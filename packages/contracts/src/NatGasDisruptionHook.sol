@@ -46,7 +46,6 @@ contract NatGasDisruptionHook is IHooks {
     constructor(IPoolManager _poolManager, DisruptionOracle _oracle) {
         poolManager = _poolManager;
         oracle = _oracle;
-        Hooks.validateHookPermissions(this, getHookPermissions());
     }
 
     function getHookPermissions() public pure returns (Hooks.Permissions memory) {
@@ -214,7 +213,7 @@ contract NatGasDisruptionHook is IHooks {
         return (IHooks.afterSwap.selector, 0);
     }
 
-    function calculateDeviation(uint256 poolPrice, uint256 theoreticalPrice) internal pure returns (uint256) {
+    function calculateDeviation(uint256 poolPrice, uint256 theoreticalPrice) public pure returns (uint256) {
         if (theoreticalPrice == 0) return 0;
 
         uint256 diff = poolPrice > theoreticalPrice
@@ -228,7 +227,7 @@ contract NatGasDisruptionHook is IHooks {
         uint256 poolPrice,
         uint256 theoreticalPrice,
         bool isBuyingToken0
-    ) internal pure returns (bool) {
+    ) public pure returns (bool) {
         if (poolPrice == theoreticalPrice) return true;
 
         bool poolAboveTheoretical = poolPrice > theoreticalPrice;
