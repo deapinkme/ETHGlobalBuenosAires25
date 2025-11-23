@@ -1,54 +1,52 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.25;
 
-import {Hooks} from "@uniswap/v4-core/src/libraries/Hooks.sol";
-import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
-import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
-import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
-import {PoolId, PoolIdLibrary} from "@uniswap/v4-core/src/types/PoolId.sol";
-import {BalanceDelta} from "@uniswap/v4-core/src/types/BalanceDelta.sol";
-import {BeforeSwapDelta, BeforeSwapDeltaLibrary} from "@uniswap/v4-core/src/types/BeforeSwapDelta.sol";
-import {Currency, CurrencyLibrary} from "@uniswap/v4-core/src/types/Currency.sol";
-import {DisruptionOracle} from "./DisruptionOracle.sol";
-import {FeeCurve} from "./libraries/FeeCurve.sol";
-import {BonusCurve} from "./libraries/BonusCurve.sol";
+import { BaseHook } from "@uniswap/v4-periphery/src/utils/BaseHook.sol";
+import { IPoolManager } from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
+import { Hooks } from "@uniswap/v4-core/src/libraries/Hooks.sol";
+import { PoolKey } from "@uniswap/v4-core/src/types/PoolKey.sol";
+import { PoolId, PoolIdLibrary } from "@uniswap/v4-core/src/types/PoolId.sol";
+import { BalanceDelta } from "@uniswap/v4-core/src/types/BalanceDelta.sol";
+import { Currency, CurrencyLibrary } from "@uniswap/v4-core/src/types/Currency.sol";
+import { BeforeSwapDelta, BeforeSwapDeltaLibrary } from "@uniswap/v4-core/src/types/BeforeSwapDelta.sol";
+import { SwapParams } from "@uniswap/v4-core/src/types/PoolOperation.sol";
+import { DisruptionOracle } from "./DisruptionOracle.sol";
+import { FeeCurve } from "./libraries/FeeCurve.sol";
+import { BonusCurve } from "./libraries/BonusCurve.sol";
 
-contract NatGasDisruptionHook is IHooks {
+contract NatGasDisruptionHook is BaseHook {
     using PoolIdLibrary for PoolKey;
     using CurrencyLibrary for Currency;
-    using BeforeSwapDeltaLibrary for BeforeSwapDelta;
 
-    IPoolManager public immutable poolManager;
     DisruptionOracle public immutable oracle;
 
     uint24 public constant ALIGNED_FEE = 100;
     uint24 public constant BASE_FEE = 3000;
     uint24 public constant MAX_MISALIGNED_FEE = 100000;
     uint256 public constant MAX_BONUS_RATE = 500;
-    uint256 public constant FEE_MULTIPLIER = 2;
-    uint256 public constant BONUS_MULTIPLIER = 1;
+    uint256 public constant FEE_MULTIPLIER = 10;
+    uint256 public constant BONUS_MULTIPLIER = 5;
 
-    mapping(PoolId => uint256) public treasuryToken0;
-    mapping(PoolId => uint256) public treasuryToken1;
     mapping(PoolId => uint256) public manualPoolPrice;
+    mapping(PoolId => uint256) public treasuryBalance;
 
-    event DynamicFeeSet(PoolId indexed poolId, uint24 fee, uint256 deviation);
-    event BonusPaid(PoolId indexed poolId, address indexed trader, uint256 amount, bool isToken0);
+    uint256 public cachedOraclePrice;
+    uint256 public lastPriceUpdate;
 
-    error NotPoolManager();
-    error HookNotImplemented();
+    event PriceReceivedFromOracle(uint256 price, uint256 timestamp);
+    event BonusPaid(PoolId indexed poolId, address indexed trader, uint256 amount);
+    event TreasuryFunded(PoolId indexed poolId, uint256 amount);
 
-    modifier onlyPoolManager() {
-        if (msg.sender != address(poolManager)) revert NotPoolManager();
-        _;
-    }
-
-    constructor(IPoolManager _poolManager, DisruptionOracle _oracle) {
-        poolManager = _poolManager;
+    constructor(
+        IPoolManager _poolManager,
+        DisruptionOracle _oracle
+    ) BaseHook(_poolManager) {
         oracle = _oracle;
+        cachedOraclePrice = _oracle.getTheoreticalPrice();
+        lastPriceUpdate = block.timestamp;
     }
 
-    function getHookPermissions() public pure returns (Hooks.Permissions memory) {
+    function getHookPermissions() public pure override returns (Hooks.Permissions memory) {
         return Hooks.Permissions({
             beforeInitialize: false,
             afterInitialize: false,
@@ -67,66 +65,14 @@ contract NatGasDisruptionHook is IHooks {
         });
     }
 
-    function beforeInitialize(address, PoolKey calldata, uint160) external pure returns (bytes4) {
-        revert HookNotImplemented();
-    }
+    function updatePriceFromOracle(uint256 price, uint256 timestamp) external {
+        require(price > 0, "Invalid price");
+        require(timestamp <= block.timestamp, "Future timestamp");
 
-    function afterInitialize(address, PoolKey calldata, uint160, int24) external pure returns (bytes4) {
-        revert HookNotImplemented();
-    }
+        cachedOraclePrice = price;
+        lastPriceUpdate = timestamp;
 
-    function beforeAddLiquidity(address, PoolKey calldata, IPoolManager.ModifyLiquidityParams calldata, bytes calldata)
-        external
-        pure
-        returns (bytes4)
-    {
-        revert HookNotImplemented();
-    }
-
-    function beforeRemoveLiquidity(address, PoolKey calldata, IPoolManager.ModifyLiquidityParams calldata, bytes calldata)
-        external
-        pure
-        returns (bytes4)
-    {
-        revert HookNotImplemented();
-    }
-
-    function afterAddLiquidity(
-        address,
-        PoolKey calldata,
-        IPoolManager.ModifyLiquidityParams calldata,
-        BalanceDelta,
-        BalanceDelta,
-        bytes calldata
-    ) external pure returns (bytes4, BalanceDelta) {
-        revert HookNotImplemented();
-    }
-
-    function afterRemoveLiquidity(
-        address,
-        PoolKey calldata,
-        IPoolManager.ModifyLiquidityParams calldata,
-        BalanceDelta,
-        BalanceDelta,
-        bytes calldata
-    ) external pure returns (bytes4, BalanceDelta) {
-        revert HookNotImplemented();
-    }
-
-    function beforeDonate(address, PoolKey calldata, uint256, uint256, bytes calldata)
-        external
-        pure
-        returns (bytes4)
-    {
-        revert HookNotImplemented();
-    }
-
-    function afterDonate(address, PoolKey calldata, uint256, uint256, bytes calldata)
-        external
-        pure
-        returns (bytes4)
-    {
-        revert HookNotImplemented();
+        emit PriceReceivedFromOracle(price, timestamp);
     }
 
     function setPoolPrice(PoolKey calldata key, uint256 price) external {
@@ -134,114 +80,112 @@ contract NatGasDisruptionHook is IHooks {
         manualPoolPrice[poolId] = price;
     }
 
-    function beforeSwap(
+    function fundTreasury(PoolKey calldata key) external payable {
+        PoolId poolId = key.toId();
+        treasuryBalance[poolId] += msg.value;
+        emit TreasuryFunded(poolId, msg.value);
+    }
+
+    function calculateDeviation(
+        uint256 poolPrice,
+        uint256 theoreticalPrice
+    ) public pure returns (uint256) {
+        if (poolPrice > theoreticalPrice) {
+            return ((poolPrice - theoreticalPrice) * 100) / theoreticalPrice;
+        } else {
+            return ((theoreticalPrice - poolPrice) * 100) / theoreticalPrice;
+        }
+    }
+
+    function _beforeSwap(
         address,
         PoolKey calldata key,
-        IPoolManager.SwapParams calldata params,
+        SwapParams calldata params,
         bytes calldata
-    ) external onlyPoolManager returns (bytes4, BeforeSwapDelta, uint24) {
+    ) internal override returns (bytes4, BeforeSwapDelta, uint24) {
         PoolId poolId = key.toId();
 
-        uint256 theoreticalPrice = oracle.getTheoreticalPrice();
         uint256 poolPrice = manualPoolPrice[poolId];
+        if (poolPrice == 0) {
+            poolPrice = cachedOraclePrice;
+        }
 
-        require(poolPrice > 0, "Pool price not set");
+        uint256 theoreticalPrice = cachedOraclePrice;
 
         uint256 deviation = calculateDeviation(poolPrice, theoreticalPrice);
 
-        bool isBuyingToken0 = params.zeroForOne;
-        bool isAligned = checkAlignment(poolPrice, theoreticalPrice, isBuyingToken0);
+        bool isBuyingNatGas = params.zeroForOne == (Currency.unwrap(key.currency0) < Currency.unwrap(key.currency1));
+        bool isAligned;
+
+        if (poolPrice > theoreticalPrice) {
+            isAligned = !isBuyingNatGas;
+        } else if (poolPrice < theoreticalPrice) {
+            isAligned = isBuyingNatGas;
+        } else {
+            isAligned = true;
+        }
 
         uint24 fee;
         if (isAligned) {
             fee = ALIGNED_FEE;
         } else {
-            fee = FeeCurve.quadraticFee(deviation, BASE_FEE, FEE_MULTIPLIER, MAX_MISALIGNED_FEE);
+            fee = FeeCurve.quadraticFee(
+                deviation,
+                BASE_FEE,
+                FEE_MULTIPLIER,
+                MAX_MISALIGNED_FEE
+            );
         }
 
-        poolManager.updateDynamicLPFee(key, fee);
-
-        emit DynamicFeeSet(poolId, fee, deviation);
-
-        return (IHooks.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
+        return (BaseHook.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, fee);
     }
 
-    function afterSwap(
+    function _afterSwap(
         address sender,
         PoolKey calldata key,
-        IPoolManager.SwapParams calldata params,
+        SwapParams calldata params,
         BalanceDelta delta,
         bytes calldata
-    ) external onlyPoolManager returns (bytes4, int128) {
+    ) internal override returns (bytes4, int128) {
         PoolId poolId = key.toId();
 
-        uint256 theoreticalPrice = oracle.getTheoreticalPrice();
         uint256 poolPrice = manualPoolPrice[poolId];
-
         if (poolPrice == 0) {
-            return (IHooks.afterSwap.selector, 0);
+            poolPrice = cachedOraclePrice;
         }
 
+        uint256 theoreticalPrice = cachedOraclePrice;
         uint256 deviation = calculateDeviation(poolPrice, theoreticalPrice);
 
-        bool isBuyingToken0 = params.zeroForOne;
-        bool isAligned = checkAlignment(poolPrice, theoreticalPrice, isBuyingToken0);
+        bool isBuyingNatGas = params.zeroForOne == (Currency.unwrap(key.currency0) < Currency.unwrap(key.currency1));
+        bool isAligned;
+
+        if (poolPrice > theoreticalPrice) {
+            isAligned = !isBuyingNatGas;
+        } else if (poolPrice < theoreticalPrice) {
+            isAligned = isBuyingNatGas;
+        } else {
+            isAligned = true;
+        }
 
         if (isAligned && deviation > 0) {
-            uint256 bonusRate = BonusCurve.quadraticBonus(deviation, BONUS_MULTIPLIER, MAX_BONUS_RATE);
+            uint256 swapAmount = uint256(int256(delta.amount0() > 0 ? delta.amount0() : -delta.amount0()));
 
-            int128 swapAmount = isBuyingToken0 ? delta.amount1() : delta.amount0();
-            uint256 absSwapAmount = swapAmount < 0 ? uint256(uint128(-swapAmount)) : uint256(uint128(swapAmount));
+            uint256 bonusRate = BonusCurve.quadraticBonus(
+                deviation,
+                BONUS_MULTIPLIER,
+                MAX_BONUS_RATE
+            );
 
-            uint256 bonusAmount = (absSwapAmount * bonusRate) / 10000;
+            uint256 bonusAmount = (swapAmount * bonusRate) / 10000;
 
-            if (isBuyingToken0) {
-                if (treasuryToken0[poolId] >= bonusAmount && bonusAmount > 0) {
-                    treasuryToken0[poolId] -= bonusAmount;
-                    poolManager.take(key.currency0, sender, bonusAmount);
-                    emit BonusPaid(poolId, sender, bonusAmount, true);
-                }
-            } else {
-                if (treasuryToken1[poolId] >= bonusAmount && bonusAmount > 0) {
-                    treasuryToken1[poolId] -= bonusAmount;
-                    poolManager.take(key.currency1, sender, bonusAmount);
-                    emit BonusPaid(poolId, sender, bonusAmount, false);
-                }
+            if (treasuryBalance[poolId] >= bonusAmount && bonusAmount > 0) {
+                treasuryBalance[poolId] -= bonusAmount;
+
+                emit BonusPaid(poolId, sender, bonusAmount);
             }
         }
 
-        return (IHooks.afterSwap.selector, 0);
-    }
-
-    function calculateDeviation(uint256 poolPrice, uint256 theoreticalPrice) public pure returns (uint256) {
-        if (theoreticalPrice == 0) return 0;
-
-        uint256 diff = poolPrice > theoreticalPrice
-            ? poolPrice - theoreticalPrice
-            : theoreticalPrice - poolPrice;
-
-        return (diff * 100) / theoreticalPrice;
-    }
-
-    function checkAlignment(
-        uint256 poolPrice,
-        uint256 theoreticalPrice,
-        bool isBuyingToken0
-    ) public pure returns (bool) {
-        if (poolPrice == theoreticalPrice) return true;
-
-        bool poolAboveTheoretical = poolPrice > theoreticalPrice;
-
-        if (poolAboveTheoretical) {
-            return !isBuyingToken0;
-        } else {
-            return isBuyingToken0;
-        }
-    }
-
-    function fundTreasury(PoolKey calldata key, uint256 amount0, uint256 amount1) external {
-        PoolId poolId = key.toId();
-        treasuryToken0[poolId] += amount0;
-        treasuryToken1[poolId] += amount1;
+        return (BaseHook.afterSwap.selector, 0);
     }
 }
