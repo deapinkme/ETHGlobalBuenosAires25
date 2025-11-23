@@ -2,13 +2,9 @@
 pragma solidity ^0.8.25;
 
 import { ContractRegistry } from "@flarenetwork/flare-periphery-contracts/coston2/ContractRegistry.sol";
-import { IWeb2Json } from "@flarenetwork/flare-periphery-contracts/coston2/IWeb2Json.sol";
+import { IWeb2Json } from "./interfaces/flare/IWeb2Json.sol";
+import { IFdcVerificationExtended } from "./interfaces/flare/IFdcVerificationExtended.sol";
 
-/**
- * @title DisruptionOracle
- * @notice Oracle that tracks natural gas price disruptions and calculates theoretical price
- * @dev Uses Flare Data Connector (FDC) for real-time price and weather data
- */
 contract DisruptionOracle {
     // Disruption types - all tracked for future iterations, currently not affecting price
     enum DisruptionType {
@@ -38,36 +34,33 @@ contract DisruptionOracle {
         uint256 timestamp;
     }
 
-    // Base price in USDC (6 decimals)
     uint256 public basePrice;
-
-    // Current active disruption
     Disruption public currentDisruption;
-
-    // Owner for emergency controls only
     address public owner;
 
-    // Weather severity to price impact mapping (severity * WEATHER_IMPACT_MULTIPLIER = impact %)
-    int256 public constant WEATHER_IMPACT_MULTIPLIER = 5;  // severity 10 = 50% impact
+    address public layerZeroEndpoint;
+    address public destinationOracle;
+    uint32 public destinationEid;
+
+    int256 public constant WEATHER_IMPACT_MULTIPLIER = 5;
 
     event DisruptionUpdated(
         DisruptionType indexed eventType,
         int256 priceImpactPercent,
         uint256 timestamp
     );
-
     event DisruptionCleared(uint256 timestamp);
-
     event BasePriceUpdated(uint256 newPrice, uint256 timestamp);
+    event PriceSentCrossChain(uint32 indexed dstEid, uint256 price, uint256 timestamp);
 
     modifier onlyOwner() {
-        require(msg.sender == owner, "Only owner can call");
+        require(msg.sender == owner, "Only owner");
         _;
     }
 
     constructor(uint256 _basePrice) {
         owner = msg.sender;
-        basePrice = _basePrice;  // e.g., 100 * 10**6 for $100
+        basePrice = _basePrice;
     }
 
     /**
@@ -161,19 +154,30 @@ contract DisruptionOracle {
         emit BasePriceUpdated(newBasePrice, block.timestamp);
     }
 
-    /**
-     * @notice Transfer ownership
-     * @param newOwner Address of new owner
-     */
+    function setLayerZeroConfig(
+        address _endpoint,
+        uint32 _dstEid,
+        address _dstOracle
+    ) external onlyOwner {
+        layerZeroEndpoint = _endpoint;
+        destinationEid = _dstEid;
+        destinationOracle = _dstOracle;
+    }
+
+    function sendPriceUpdate() external payable {
+        require(layerZeroEndpoint != address(0), "LayerZero not configured");
+        require(destinationEid != 0, "Destination not set");
+
+        bytes memory payload = abi.encode(basePrice, block.timestamp);
+
+        emit PriceSentCrossChain(destinationEid, basePrice, block.timestamp);
+    }
+
     function transferOwnership(address newOwner) external onlyOwner {
         require(newOwner != address(0), "Invalid address");
         owner = newOwner;
     }
 
-    /**
-     * @notice Helper functions for FDC proof signature generation
-     * @dev These are used to generate the ABI signature for encoding/decoding
-     */
     function abiSignaturePriceData(PriceData calldata data) external pure {}
     function abiSignatureWeatherData(WeatherData calldata data) external pure {}
 
@@ -183,6 +187,6 @@ contract DisruptionOracle {
      * @return bool True if proof is valid
      */
     function isWeb2JsonProofValid(IWeb2Json.Proof calldata proof) private view returns (bool) {
-        return ContractRegistry.getFdcVerification().verifyWeb2Json(proof);
+        return IFdcVerificationExtended(address(ContractRegistry.getFdcVerification())).verifyWeb2Json(proof);
     }
 }
