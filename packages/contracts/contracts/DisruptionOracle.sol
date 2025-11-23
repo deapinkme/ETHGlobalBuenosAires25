@@ -1,18 +1,22 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.24;
+pragma solidity ^0.8.25;
+
+import { ContractRegistry } from "@flarenetwork/flare-periphery-contracts/coston2/ContractRegistry.sol";
+import { IWeb2Json } from "@flarenetwork/flare-periphery-contracts/coston2/IWeb2Json.sol";
 
 /**
  * @title DisruptionOracle
- * @notice Oracle that tracks oil price disruptions and calculates theoretical price
- * @dev In production, this would be updated via Chainlink Functions
+ * @notice Oracle that tracks natural gas price disruptions and calculates theoretical price
+ * @dev Uses Flare Data Connector (FDC) for real-time price and weather data
  */
 contract DisruptionOracle {
+    // Disruption types - all tracked for future iterations, currently not affecting price
     enum DisruptionType {
         NONE,
-        SUPPLY_SHOCK,
-        DEMAND_SHOCK,
-        WEATHER,
-        SANCTIONS
+        SUPPLY_SHOCK,      // Future: Natural gas supply disruptions
+        DEMAND_SHOCK,      // Future: Demand spikes or crashes
+        WEATHER,           // Future: Weather events affecting natural gas production
+        SANCTIONS          // Future: Geopolitical sanctions
     }
 
     struct Disruption {
@@ -22,14 +26,29 @@ contract DisruptionOracle {
         bool active;
     }
 
+    // Data structures for FDC attestations
+    struct PriceData {
+        uint256 price;          // Natural gas price in USDC (6 decimals)
+        uint256 timestamp;
+    }
+
+    struct WeatherData {
+        string eventDescription;  // e.g., "Hurricane in Gulf of Mexico"
+        int256 severity;         // Scale 1-10, affects price impact
+        uint256 timestamp;
+    }
+
     // Base price in USDC (6 decimals)
     uint256 public basePrice;
 
     // Current active disruption
     Disruption public currentDisruption;
 
-    // Owner can update disruptions (in production, this would be Chainlink)
+    // Owner for emergency controls only
     address public owner;
+
+    // Weather severity to price impact mapping (severity * WEATHER_IMPACT_MULTIPLIER = impact %)
+    int256 public constant WEATHER_IMPACT_MULTIPLIER = 5;  // severity 10 = 50% impact
 
     event DisruptionUpdated(
         DisruptionType indexed eventType,
@@ -38,6 +57,8 @@ contract DisruptionOracle {
     );
 
     event DisruptionCleared(uint256 timestamp);
+
+    event BasePriceUpdated(uint256 newPrice, uint256 timestamp);
 
     modifier onlyOwner() {
         require(msg.sender == owner, "Only owner can call");
@@ -52,41 +73,78 @@ contract DisruptionOracle {
     /**
      * @notice Get the theoretical price based on current disruption
      * @return Theoretical price in USDC (6 decimals)
+     * @dev Currently returns basePrice only. All disruption types (SUPPLY_SHOCK, DEMAND_SHOCK,
+     *      WEATHER, SANCTIONS) are tracked but don't affect price in initial iteration.
      */
     function getTheoreticalPrice() external view returns (uint256) {
-        if (!currentDisruption.active) {
-            return basePrice;
-        }
+        // For initial iteration, all disruptions are tracked but don't affect price
+        return basePrice;
 
-        // Calculate adjusted price: basePrice * (100 + impact) / 100
-        int256 adjustedPrice = int256(basePrice) * (100 + currentDisruption.priceImpactPercent) / 100;
-
-        require(adjustedPrice > 0, "Invalid price calculation");
-
-        return uint256(adjustedPrice);
+        // TODO: Uncomment for future iteration with all disruption types
+        // if (!currentDisruption.active) {
+        //     return basePrice;
+        // }
+        //
+        // // Calculate adjusted price: basePrice * (100 + impact) / 100
+        // int256 adjustedPrice = int256(basePrice) * (100 + currentDisruption.priceImpactPercent) / 100;
+        //
+        // require(adjustedPrice > 0, "Invalid price calculation");
+        //
+        // return uint256(adjustedPrice);
     }
 
     /**
-     * @notice Set a new disruption event
-     * @param dtype Type of disruption
-     * @param impactPercent Price impact as percentage (e.g., +20 for +20%, -15 for -15%)
+     * @notice Update base price using FDC price attestation
+     * @param proof FDC Web2Json proof containing price data
      */
-    function setDisruption(DisruptionType dtype, int256 impactPercent) external onlyOwner {
-        require(dtype != DisruptionType.NONE, "Use clearDisruption instead");
-        require(impactPercent >= -100, "Impact cannot reduce price below zero");
+    function updateBasePriceWithFDC(IWeb2Json.Proof calldata proof) external {
+        require(isWeb2JsonProofValid(proof), "Invalid FDC proof");
+
+        PriceData memory priceData = abi.decode(
+            proof.data.responseBody.abiEncodedData,
+            (PriceData)
+        );
+
+        require(priceData.price > 0, "Base price must be positive");
+        require(priceData.timestamp <= block.timestamp, "Future timestamp not allowed");
+        require(priceData.timestamp > block.timestamp - 1 hours, "Price data too old");
+
+        basePrice = priceData.price;
+        emit BasePriceUpdated(priceData.price, priceData.timestamp);
+    }
+
+    /**
+     * @notice Set weather disruption using FDC weather attestation
+     * @param proof FDC Web2Json proof containing weather data
+     * @dev For future iteration - currently tracks disruptions but doesn't affect price
+     */
+    function setWeatherDisruptionWithFDC(IWeb2Json.Proof calldata proof) external {
+        require(isWeb2JsonProofValid(proof), "Invalid FDC proof");
+
+        WeatherData memory weatherData = abi.decode(
+            proof.data.responseBody.abiEncodedData,
+            (WeatherData)
+        );
+
+        require(weatherData.severity >= 0 && weatherData.severity <= 10, "Severity must be 0-10");
+        require(weatherData.timestamp <= block.timestamp, "Future timestamp not allowed");
+        require(weatherData.timestamp > block.timestamp - 1 hours, "Weather data too old");
+
+        // Calculate impact based on severity
+        int256 impactPercent = weatherData.severity * WEATHER_IMPACT_MULTIPLIER;
 
         currentDisruption = Disruption({
-            eventType: dtype,
+            eventType: DisruptionType.WEATHER,
             priceImpactPercent: impactPercent,
-            timestamp: block.timestamp,
+            timestamp: weatherData.timestamp,
             active: true
         });
 
-        emit DisruptionUpdated(dtype, impactPercent, block.timestamp);
+        emit DisruptionUpdated(DisruptionType.WEATHER, impactPercent, weatherData.timestamp);
     }
 
     /**
-     * @notice Clear current disruption
+     * @notice Clear current disruption (emergency only)
      */
     function clearDisruption() external onlyOwner {
         currentDisruption.active = false;
@@ -94,12 +152,13 @@ contract DisruptionOracle {
     }
 
     /**
-     * @notice Update base price
+     * @notice Emergency: Update base price manually (owner only)
      * @param newBasePrice New base price in USDC (6 decimals)
      */
     function updateBasePrice(uint256 newBasePrice) external onlyOwner {
         require(newBasePrice > 0, "Base price must be positive");
         basePrice = newBasePrice;
+        emit BasePriceUpdated(newBasePrice, block.timestamp);
     }
 
     /**
@@ -109,5 +168,21 @@ contract DisruptionOracle {
     function transferOwnership(address newOwner) external onlyOwner {
         require(newOwner != address(0), "Invalid address");
         owner = newOwner;
+    }
+
+    /**
+     * @notice Helper functions for FDC proof signature generation
+     * @dev These are used to generate the ABI signature for encoding/decoding
+     */
+    function abiSignaturePriceData(PriceData calldata data) external pure {}
+    function abiSignatureWeatherData(WeatherData calldata data) external pure {}
+
+    /**
+     * @notice Verify FDC Web2Json proof
+     * @param proof The FDC proof to verify
+     * @return bool True if proof is valid
+     */
+    function isWeb2JsonProofValid(IWeb2Json.Proof calldata proof) private view returns (bool) {
+        return ContractRegistry.getFdcVerification().verifyWeb2Json(proof);
     }
 }

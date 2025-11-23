@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.24;
+pragma solidity ^0.8.25;
 
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
 /**
- * @title OilToken
- * @notice Simple ERC20 token representing oil for the disruption hook demo
+ * @title NatGasToken
+ * @notice Simple ERC20 token representing natural gas for the disruption hook demo
  */
-contract OilToken is ERC20 {
-    constructor() ERC20("Oil Token", "OIL") {
+contract NatGasToken is ERC20 {
+    constructor() ERC20("Natural Gas Token", "NATGAS") {
         // Mint initial supply to deployer
         _mint(msg.sender, 1_000_000 * 10**18);
     }
