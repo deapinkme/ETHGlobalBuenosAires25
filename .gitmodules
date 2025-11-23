@@ -1,0 +1,3 @@
+[submodule "packages/contracts/lib/flare-foundry-periphery-package"]
+	path = packages/contracts/lib/flare-foundry-periphery-package
+	url = https://github.com/flare-foundation/flare-foundry-periphery-package
