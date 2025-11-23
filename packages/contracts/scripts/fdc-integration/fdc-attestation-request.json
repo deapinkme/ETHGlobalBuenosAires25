@@ -1,0 +1,128 @@
+{
+  "_comment": "Flare Data Connector (FDC) Attestation Request for EIA Henry Hub Prices",
+  "_usage": "Submit this request to the FDC verifier on Coston2 testnet to fetch Henry Hub natural gas prices",
+  "_verifier_url": "https://fdc-verifiers-testnet.flare.network/",
+  "_documentation": "https://dev.flare.network/fdc/",
+
+  "attestationType": "0x4a736f6e417069000000000000000000000000000000000000000000000000",
+  "_attestationType_note": "Hex-encoded 'JsonApi' (zero-padded to 32 bytes)",
+
+  "sourceId": "0x4549410000000000000000000000000000000000000000000000000000000000",
+  "_sourceId_note": "Hex-encoded 'EIA' (zero-padded to 32 bytes) - identifies data source",
+
+  "requestBody": {
+    "url": "https://api.eia.gov/v2/natural-gas/pri/fut/data/?api_key=YOUR_API_KEY&frequency=daily&data[0]=value&facets[series][]=RNGWHHD&sort[0][column]=period&sort[0][direction]=desc&offset=0&length=1",
+    "_url_note": "Replace YOUR_API_KEY with your actual EIA API key. The facets[series][]=RNGWHHD filters for Henry Hub prices only.",
+
+    "jqTransform": ".response.data[0] | {price: (.value | tonumber * 1000000 | floor), timestamp: (.period | fromdateiso8601)}",
+    "_jqTransform_note": "Converts EIA response to PriceData format (price in 6 decimals, timestamp as Unix time)",
+
+    "abi": {
+      "components": [
+        {
+          "internalType": "uint256",
+          "name": "price",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "timestamp",
+          "type": "uint256"
+        }
+      ],
+      "internalType": "struct DisruptionOracle.PriceData",
+      "name": "",
+      "type": "tuple"
+    },
+    "_abi_note": "ABI encoding format matching DisruptionOracle.PriceData struct"
+  },
+
+  "_example_eia_response": {
+    "response": {
+      "data": [
+        {
+          "period": "2025-11-19",
+          "series": "RNGWHHD",
+          "value": "3.93",
+          "units": "dollars per million Btu"
+        }
+      ]
+    }
+  },
+
+  "_example_transformed_output": {
+    "price": 3930000,
+    "timestamp": 1732060800,
+    "_note": "price: 3930000 = $3.93 with 6 decimals; timestamp: Unix time for 2025-11-19"
+  },
+
+  "_step_by_step_guide": {
+    "1": "Get your EIA API key from https://www.eia.gov/opendata/register.php",
+    "2": "Replace 'YOUR_API_KEY' in the url field with your actual key",
+    "3": "Submit this JSON to FDC verifier at https://fdc-verifiers-testnet.flare.network/",
+    "4": "Wait for attestation proof to be generated",
+    "5": "Use the proof to call DisruptionOracle.updateBasePriceWithFDC(proof)",
+    "6": "Your contract will verify and update the base price"
+  },
+
+  "_jq_transformation_breakdown": {
+    "input": ".response.data[0]",
+    "explanation": "Extract first (most recent) data point from EIA response",
+    "operations": [
+      {
+        "step": ".value | tonumber",
+        "purpose": "Convert string '3.93' to number 3.93"
+      },
+      {
+        "step": "* 1000000",
+        "purpose": "Scale to 6 decimals: 3930000"
+      },
+      {
+        "step": "| floor",
+        "purpose": "Round down to integer (removes any floating point errors)"
+      },
+      {
+        "step": ".period | fromdateiso8601",
+        "purpose": "Convert '2025-11-19' to Unix timestamp"
+      }
+    ],
+    "output": "{price: 3930000, timestamp: 1732060800}"
+  },
+
+  "_contract_compatibility": {
+    "contract": "DisruptionOracle.sol",
+    "function": "updateBasePriceWithFDC(IWeb2Json.Proof calldata proof)",
+    "struct": "struct PriceData { uint256 price; uint256 timestamp; }",
+    "validation": [
+      "price > 0",
+      "timestamp <= block.timestamp",
+      "timestamp > block.timestamp - 1 hours"
+    ]
+  },
+
+  "_alternative_configurations": {
+    "weekly_prices": {
+      "url_change": "facets[series][]=RNGWHHW",
+      "description": "Use RNGWHHW for weekly Henry Hub prices"
+    },
+    "monthly_prices": {
+      "url_change": "facets[series][]=RNGWHHM",
+      "description": "Use RNGWHHM for monthly Henry Hub prices"
+    },
+    "historical_data": {
+      "url_addition": "&start=2025-01-01&end=2025-12-31",
+      "description": "Add date range for historical data"
+    }
+  },
+
+  "_testing_checklist": [
+    "✓ Register for EIA API key",
+    "✓ Test API endpoint with curl or Postman",
+    "✓ Verify response contains 'value' and 'period' fields",
+    "✓ Test JQ transformation locally (use jq CLI tool)",
+    "✓ Submit attestation request to FDC verifier",
+    "✓ Retrieve proof from verifier",
+    "✓ Call contract function with proof on Coston2",
+    "✓ Verify basePrice updated in contract"
+  ]
+}

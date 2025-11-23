@@ -176,6 +176,31 @@ export BASE_SEPOLIA_RPC=your_rpc_url
 npx hardhat run scripts/deploy.ts --network baseSepolia
 ```
 
+### Setup EIA API for FDC Integration
+
+To feed real-time Henry Hub natural gas prices into the oracle:
+
+1. **Register for EIA API key** (free, 2 minutes):
+   ```bash
+   # Visit: https://www.eia.gov/opendata/register.php
+   # Save your API key to .env
+   echo "EIA_API_KEY=your_key_here" >> .env
+   ```
+
+2. **Test the API connection**:
+   ```bash
+   cd packages/contracts
+   npx ts-node scripts/fdc-integration/test-eia-api.ts
+   ```
+
+3. **View complete setup guide**:
+   - See `scripts/fdc-integration/eia-api-setup.md` for detailed instructions
+   - See `API_SOURCES.md` for alternative price sources
+
+4. **Submit FDC attestation** (on Coston2 testnet):
+   - Use the template in `scripts/fdc-integration/fdc-attestation-request.json`
+   - See `scripts/fdc-integration/submit-fdc-proof.ts` for submission script
+
 ## Mechanism Details
 
 ### Fee Structure

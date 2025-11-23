@@ -9,6 +9,8 @@ out/
 *.tsbuildinfo
 
 # Environment variables
+# NOTE: .env is NOT ignored for hackathon team sharing
+# Uncomment .env below after hackathon for production security!
 .env
 .env.local
 .env.*.local
