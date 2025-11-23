@@ -443,3 +443,276 @@ echo "BASE_SEPOLIA_RPC=https://sepolia.base.org" >> .env
 3. Run deployment scripts
 
 Good luck! 🚀
+  console.log("Deploying Oil Disruption Hook...");
+
+  // 1. Deploy MockUSDC
+  const usdc = await hre.viem.deployContract("MockUSDC");
+  console.log(`MockUSDC deployed to ${usdc.address}`);
+
+  // 2. Deploy OilToken
+  const oil = await hre.viem.deployContract("OilToken");
+  console.log(`OilToken deployed to ${oil.address}`);
+
+  // 3. Deploy DisruptionOracle
+  const basePrice = 100_000000n; // $100
+  const oracle = await hre.viem.deployContract("DisruptionOracle", [basePrice]);
+  console.log(`DisruptionOracle deployed to ${oracle.address}`);
+
+  // 4. Deploy OilDisruptionHook
+  // const hook = await hre.viem.deployContract("OilDisruptionHook", [
+  //   poolManagerAddress,
+  //   oracle.address
+  // ]);
+  // console.log(`OilDisruptionHook deployed to ${hook.address}`);
+
+  // 5. Verify contracts
+  console.log("\nVerifying contracts...");
+  // Add verification logic
+}
+
+main().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});
+```
+
+---
+
+### Step 8: Setup Frontend (Next.js)
+
+**Create:** `packages/frontend/`
+
+```bash
+cd packages
+npx create-next-app@latest frontend --typescript --tailwind --app --no-src-dir
+cd frontend
+npm install wagmi viem @tanstack/react-query
+```
+
+Key components to build:
+1. **Swap Widget** - Shows fee/bonus preview
+2. **Price Dashboard** - Pool vs Oracle price
+3. **Disruption Feed** - Timeline of events
+4. **Faucet Component** - Mint test tokens
+
+---
+
+## Critical Decisions Needed 🤔
+
+### Decision 1: Hardhat vs Foundry for Hook Development
+
+**Current:** Hardhat 3 setup ✅
+**Issue:** V4 hooks are primarily Foundry-based
+**Options:**
+- A) Add Foundry alongside Hardhat (hybrid approach)
+- B) Migrate fully to Foundry
+- C) Continue with Hardhat and manually port V4 interfaces
+
+**Recommendation:** Add Foundry for hook development, keep Hardhat for deployment scripts.
+
+### Decision 2: Testnet Choice
+
+**Options:**
+- Base Sepolia (recommended - L2, cheap, Uniswap support)
+- Sepolia (Ethereum testnet)
+- Arbitrum Sepolia
+
+**Recommendation:** Base Sepolia for lower gas costs.
+
+### Decision 3: Mock V4 vs Real V4 Deployment
+
+For hackathon purposes:
+- **Option A:** Deploy to real V4 testnet pools
+- **Option B:** Create simplified mock PoolManager for demo
+
+**Recommendation:** Start with mock for faster development, migrate to real V4 if time permits.
+
+---
+
+## Development Workflow 🔄
+
+### Daily Development Loop
+
+1. **Morning:** Pick next contract/feature
+2. **Implement:** Write contract/test
+3. **Test:** `npx hardhat test`
+4. **Commit:** Git commit progress
+5. **Document:** Update this file with blockers
+
+### Git Workflow
+
+```bash
+# Create feature branch
+git checkout -b feature/hook-implementation
+
+# Commit frequently
+git add .
+git commit -m "feat: implement beforeSwap logic"
+
+# Push to remote
+git push origin feature/hook-implementation
+```
+
+---
+
+## Blockers & Solutions 🚧
+
+### Blocker 1: Uniswap V4 Dependencies Not on npm
+
+**Solution:**
+```bash
+# Option 1: Use Foundry
+forge install uniswap/v4-core
+
+# Option 2: Manual vendor
+mkdir -p contracts/vendor
+# Copy interfaces from v4-core repo
+```
+
+### Blocker 2: Pool Price Calculation Complex
+
+**Solution:** Use simplified price oracle for demo:
+```solidity
+// Instead of complex TWAP/sqrt price:
+function getCurrentPoolPrice(PoolKey calldata key) internal view returns (uint256) {
+    // For demo: use last swap price or manual setter
+    return manualPoolPrice;
+}
+```
+
+### Blocker 3: CREATE2 Address Requirements
+
+V4 hooks must be deployed to specific addresses encoding their permissions.
+
+**Solution:** Use Foundry's create2 helpers or v4-template deployment scripts.
+
+---
+
+## Quick Reference 📚
+
+### Important Files
+
+| File | Purpose | Status |
+|------|---------|--------|
+| `IMPLEMENTATION_PLAN.md` | Full technical spec | ✅ Complete |
+| `README.md` | Project overview | ✅ Complete |
+| `NEXT_STEPS.md` | This file | ✅ You are here |
+| `packages/contracts/contracts/OilDisruptionHook.sol` | Main hook | ❌ TODO |
+| `packages/contracts/test/` | Tests | ❌ TODO |
+| `packages/frontend/` | UI | ❌ TODO |
+
+### Useful Commands
+
+```bash
+# Compile contracts
+cd packages/contracts && npx hardhat compile
+
+# Run tests
+npx hardhat test
+
+# Run specific test
+npx hardhat test test/unit/DisruptionOracle.test.ts
+
+# Deploy to testnet
+npx hardhat run scripts/deploy.ts --network baseSepolia
+
+# Verify contract
+npx hardhat verify --network baseSepolia DEPLOYED_ADDRESS constructor_args
+
+# Start frontend
+cd packages/frontend && npm run dev
+```
+
+### Key Documentation Links
+
+- [Uniswap V4 Docs](https://docs.uniswap.org/contracts/v4/overview)
+- [V4 Hooks Guide](https://docs.uniswap.org/contracts/v4/guides/hooks/your-first-hook)
+- [Hardhat Docs](https://hardhat.org/docs)
+- [Wagmi Docs](https://wagmi.sh/)
+- [Viem Docs](https://viem.sh/)
+
+---
+
+## Estimated Time Breakdown ⏱️
+
+| Task | Time Estimate | Priority |
+|------|---------------|----------|
+| Setup V4 dependencies | 2-3 hours | 🔴 High |
+| Implement OilDisruptionHook | 4-6 hours | 🔴 High |
+| Write unit tests | 3-4 hours | 🟡 Medium |
+| Write integration tests | 4-5 hours | 🟢 Low |
+| Build frontend | 6-8 hours | 🟡 Medium |
+| Deploy & test on testnet | 2-3 hours | 🟡 Medium |
+| Create demo scenarios | 2-3 hours | 🟡 Medium |
+| Documentation & pitch | 2-3 hours | 🟡 Medium |
+| **Total** | **25-35 hours** | |
+
+---
+
+## When You Return 🔄
+
+### Quickstart Checklist
+
+1. [ ] Pull latest code: `git pull origin main`
+2. [ ] Check dependencies: `cd packages/contracts && npm install`
+3. [ ] Compile contracts: `npx hardhat compile`
+4. [ ] Review this file for next task
+5. [ ] Pick one task from "Immediate Next Steps"
+6. [ ] Update todos in this file as you progress
+
+### First Task Recommendation
+
+**Start here:** Complete Step 2 (Add Uniswap V4 Dependencies) using Foundry.
+
+This unblocks all hook development.
+
+```bash
+# Install Foundry
+curl -L https://foundry.paradigm.xyz | bash
+foundryup
+
+# Add to project
+cd packages/contracts
+forge init --force
+forge install uniswap/v4-core
+forge install uniswap/v4-periphery
+```
+
+---
+
+## Questions? 🤔
+
+Refer to:
+1. **IMPLEMENTATION_PLAN.md** - Technical details
+2. **README.md** - Project overview
+3. **Uniswap V4 docs** - Hook architecture
+4. **ETHGlobal Discord** - Community support
+
+---
+
+## Success Criteria for Hackathon ✨
+
+### Minimum Viable Demo (MVP)
+- [x] Core contracts implemented
+- [ ] Hook contract working (even if simplified)
+- [ ] Deployed to testnet
+- [ ] Basic frontend showing:
+  - Pool price vs Oracle price
+  - Fee preview
+  - One successful swap with bonus
+- [ ] 3-minute pitch ready
+
+### Stretch Goals
+- [ ] Full Chainlink integration
+- [ ] Multiple disruption scenarios
+- [ ] Advanced fee curves
+- [ ] Treasury dashboard
+- [ ] Price convergence chart
+
+---
+
+**Last Updated:** 2025-11-22
+
+**Next Action:** Add Uniswap V4 dependencies (Step 2)
+
+Good luck! 🚀
